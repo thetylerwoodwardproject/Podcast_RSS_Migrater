@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Convert podcast artwork and migrate feed URLs using a backup manifest.
 
-Requires Python 3.8+ and macOS (uses the built-in sips image converter).
-No Python packages are required. Run with --help for options.
+Requires Python 3.10+ and Pillow. Works on Windows, Linux, and macOS.
+Install dependencies with: python -m pip install -r requirements.txt
+Run with --help for options.
 
 The folder must contain feed.xml and the manifest.json produced by the
 podcast backup. Original download URLs are retained in the manifest;
@@ -18,7 +19,6 @@ import os
 from pathlib import Path
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
 from urllib.parse import quote, unquote, urlsplit
@@ -54,33 +54,49 @@ def checked_path(root, relative):
     return path
 
 
-def image_properties(path):
-    result = subprocess.run(
-        ["sips", "-g", "format", "-g", "pixelWidth", "-g", "pixelHeight", str(path)],
-        check=True, capture_output=True, text=True,
-    )
-    return dict(re.findall(r"^\s+(format|pixelWidth|pixelHeight): (.+)$",
-                           result.stdout, re.MULTILINE))
+def load_pillow():
+    # Keep --help and --dry-run available before dependencies are installed.
+    try:
+        from PIL import Image, ImageOps
+    except ImportError as error:
+        raise ValueError(
+            "Pillow is required for image conversion. Run: "
+            "python -m pip install -r requirements.txt (from the script folder)"
+        ) from error
+    return Image, ImageOps
 
 
 def convert_image(source, target, quality):
+    Image, ImageOps = load_pillow()
     target.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["sips", "-s", "format", "jpeg", "-s", "formatOptions", str(quality),
-         str(source), "--out", str(target)],
-        check=True, capture_output=True, text=True,
-    )
-    before, after = image_properties(source), image_properties(target)
-    if (after.get("format") != "jpeg"
-            or any(before.get(k) != after.get(k)
-                   for k in ("pixelWidth", "pixelHeight"))):
-        raise ValueError("Image verification failed: " + str(source))
-    with target.open("rb") as handle:
-        start = handle.read(2)
-        handle.seek(-2, 2)
-        end = handle.read(2)
-    if start != b"\xff\xd8" or end != b"\xff\xd9":
-        raise ValueError("Invalid JPEG output: " + str(target))
+    with Image.open(source) as original:
+        if getattr(original, "n_frames", 1) != 1:
+            raise ValueError("Animated or multipage image cannot become one JPEG: " + str(source))
+        # Apply camera orientation before removing the orientation tag.
+        with ImageOps.exif_transpose(original) as oriented:
+            expected_size = oriented.size
+            options = {"quality": quality, "optimize": True}
+            exif = oriented.getexif()
+            if exif:
+                options["exif"] = exif.tobytes()
+            if oriented.info.get("dpi"):
+                options["dpi"] = oriented.info["dpi"]
+            # A CMYK/grayscale profile is not valid for converted RGB pixels.
+            if oriented.mode in {"RGB", "RGBA", "P"} and oriented.info.get("icc_profile"):
+                options["icc_profile"] = oriented.info["icc_profile"]
+            if "A" in oriented.getbands() or "transparency" in oriented.info:
+                with oriented.convert("RGBA") as rgba, Image.new("RGB", oriented.size, "white") as rgb:
+                    with rgba.getchannel("A") as alpha:
+                        rgb.paste(rgba, mask=alpha)
+                    rgb.save(target, format="JPEG", **options)
+            else:
+                with oriented.convert("RGB") as rgb:
+                    rgb.save(target, format="JPEG", **options)
+    # Reopen and fully decode the output before any original can be deleted.
+    with Image.open(target) as result:
+        result.load()
+        if result.format != "JPEG" or result.mode != "RGB" or result.size != expected_size:
+            raise ValueError("Image verification failed: " + str(source))
 
 
 def media_urls(tree):
@@ -249,8 +265,8 @@ def run(args):
     if args.dry_run:
         print("Dry run complete. No files changed or downloaded.")
         return
-    if (process or downloads) and not shutil.which("sips"):
-        raise ValueError("This script needs macOS's built-in sips command")
+    if process or downloads:
+        load_pillow()
 
     with tempfile.TemporaryDirectory(prefix="podcast-stage-") as temporary:
         stage = Path(temporary)
@@ -343,10 +359,8 @@ def main():
         parser.error("--quality must be between 1 and 100")
     try:
         run(args)
-    except (OSError, ValueError, KeyError, ET.ParseError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, KeyError, ET.ParseError) as error:
         print("Error:", error, file=sys.stderr)
-        if isinstance(error, subprocess.CalledProcessError) and error.stderr:
-            print(error.stderr, file=sys.stderr)
         return 1
     return 0
 
