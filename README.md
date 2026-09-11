@@ -1,14 +1,45 @@
 # Podcast RSS Archiver
 
-Prepare an existing podcast backup for a new hosting location. This Python script converts artwork to JPEG, rewrites podcast asset URLs, and keeps the backup manifest in sync.
+Prepare an existing podcast backup for a new hosting location on Windows, Linux, or macOS. This Python script uses Pillow to convert artwork to JPEG, rewrite podcast asset URLs, and keep the backup manifest in sync.
+
+## GitHub description
+
+A cross-platform Python tool that prepares podcast RSS backups for new hosting. Converts artwork to JPEG, updates feed and chapter URLs, syncs manifest metadata, and removes replaced images. Supports Windows, Linux, and macOS with configurable quality, dry runs, backups, and recovery.
+
+This description is also saved in `description.txt` for copying into GitHub's About field.
 
 ## Requirements
 
-- macOS with Python 3.8 or newer. Image conversion uses macOS's built-in `sips` command; no Python packages are needed.
+- Windows, Linux, or macOS with Python 3.10 or newer.
+- Pillow, installed using `requirements.txt`. No operating-system image conversion command is required.
 - A podcast backup folder containing `feed.xml`, `manifest.json`, and the downloaded assets. The manifest must map original URLs to local files, as in this backup.
 - Internet access only if the channel cover is missing and must be downloaded.
 
 This script prepares an existing backup. It does not download an entire podcast or upload files to object storage.
+
+## Installation
+
+Open a terminal in the `podcast_rss_archiver` folder. Create a virtual environment and install the dependency.
+
+**macOS or Linux:**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+**Windows (PowerShell or Command Prompt):**
+
+```powershell
+py -3 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe migrate_podcast.py "C:\path\to\backup" --dry-run
+```
+
+The examples below use `python3`. On Windows, use `.venv\Scripts\python.exe` instead and substitute your Windows folder path. Multiline examples use Bash syntax; on Windows, put the command on one line. If the Windows `py` launcher is unavailable, use `python` to create the environment.
+
+The Pillow 12 dependency requires Python 3.10 or newer; see the [Pillow Python support table](https://pillow.readthedocs.io/en/stable/installation/python-support.html).
 
 ## Quick start
 
@@ -93,8 +124,8 @@ python3 "/path/to/podcast_rss_archiver/migrate_podcast.py"
 ## What changes
 
 1. Recursively scans the backup for image files, excluding hidden files and directories.
-2. Converts images to `.jpg` at the chosen quality, retaining pixel dimensions. Existing JPEGs are also recompressed unless the script previously processed the exact file at that quality.
-3. Verifies each JPEG before installing it. Conversion uses `sips`; PNG and JPEG are the expected inputs for this backup. Other recognized formats depend on the macOS version. Use static, single-frame images: JPEG cannot preserve animation, multiple pages, or transparency.
+2. Converts images to RGB `.jpg` files at the chosen quality without resizing. EXIF orientation is applied, so rotated photographs may swap width and height. Transparent areas are composited onto white. Existing JPEGs are also recompressed unless the script previously processed the exact file at that quality.
+3. Reopens and fully decodes each JPEG before installing it. PNG, JPEG, BMP, and static GIF/TIFF inputs are supported. WebP and AVIF support depends on the installed Pillow build. HEIC requires an additional decoder and is not supported by this script's default installation. Animated and multipage images are rejected before any original files are changed. RGB ICC profiles, EXIF metadata, and DPI are retained when available. See [Pillow's image format documentation](https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html).
 4. Downloads a missing channel cover to `images/podcast-cover.jpg` when needed.
 5. Rewrites the feed's self URL, audio enclosures, episode and channel artwork, transcripts, chapter files, and embedded chapter artwork URLs.
 6. Updates image references inside chapter JSON files and corrects enclosure byte lengths if needed.
@@ -129,7 +160,24 @@ The manifest's `jpeg_processing` field records image quality and checksums. Re-r
 - **No local asset mapping:** The feed references a podcast asset absent from the manifest. Add the matching downloaded file and manifest entry; the script will not invent a destination.
 - **Conflicting JPEG destination:** Two images would share a `.jpg` filename. Resolve their names and manifest references before converting.
 - **Missing cover download fails:** Check network access or download and register the cover in the manifest yourself.
-- **`sips` is unavailable:** This version requires macOS.
-- **Image conversion fails:** Original files are untouched if staging fails. Check that the source format is supported by `sips`.
+- **Pillow is missing:** Install `requirements.txt` using the same Python interpreter that runs the script. On Windows, use `.venv\Scripts\python.exe -m pip install -r requirements.txt`.
+- **Dependency installation fails on an old Python version:** Use Python 3.10 or newer to create the virtual environment.
+- **Image conversion fails:** Original files are untouched if staging fails. Check that the input is a valid, single-frame image supported by your Pillow installation. HEIC is not supported by the default installation.
 
 A successful run exits with code `0`; validation or processing failures exit with a nonzero code. Files must still be uploaded separately, preserving their relative paths.
+
+## Run the tests
+
+After installing the dependency, run from this folder:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+On Windows:
+
+```powershell
+.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Tests use temporary sample files and cover image conversion, transparency, orientation, invalid inputs, feed and chapter rewriting, repeat runs, and recovery after an installation failure.
