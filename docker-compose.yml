@@ -1,0 +1,22 @@
+services:
+  migrater:
+    build: .
+    image: podcast-rss-migrater:latest
+    container_name: migrater
+    ports:
+      - "8080:8080"
+    volumes:
+      - migrater-data:/data
+    environment:
+      PORT: "8080"
+      MIGRATER_DATA_PATH: /data
+      # Prefills the "new base URL" field in the UI.
+      # MIGRATER_DEFAULT_BASE_URL: "https://media.example.com/"
+      # A whole podcast lands in the volume, so raise these to suit your disk.
+      # MIGRATER_MAX_JOB_GB: "50"
+      # MIGRATER_JOB_RETENTION_HOURS: "24"
+    restart: unless-stopped
+    init: true
+
+volumes:
+  migrater-data:
