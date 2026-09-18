@@ -1,0 +1,246 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push supersedes an in-flight run for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+  shell:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+
+      - name: Lint install scripts
+        working-directory: scripts
+        run: shellcheck -x bootstrap.sh install.sh update.sh uninstall.sh lib.sh smoke-test.sh
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t migrater:ci .
+
+      # The smoke test serves its fixture podcast from the host, so the container
+      # has to be able to reach 127.0.0.1 and private addresses must be allowed.
+      - name: Start the container
+        run: |
+          docker run -d --name migrater --network host \
+            -e MIGRATER_ALLOW_PRIVATE_HOSTS=true \
+            migrater:ci
+
+      # Polls the HEALTHCHECK that ships in the Dockerfile rather than a separate
+      # probe, so a broken health check fails here instead of in production.
+      - name: Wait for the container to report healthy
+        run: |
+          for _ in $(seq 1 60); do
+            status="$(docker inspect --format '{{.State.Health.Status}}' migrater)"
+            echo "health: ${status}"
+            [ "$status" = healthy ] && exit 0
+            [ "$status" = unhealthy ] && break
+            sleep 2
+          done
+          echo "container never became healthy" >&2
+          docker logs migrater
+          exit 1
+
+      # sharp's native binary is resolved through optional dependencies, which
+      # `npm prune` can silently drop. Asserted in the final image, not the build.
+      - name: The image can load sharp
+        run: docker exec migrater node -e "require('sharp'); console.log('sharp ok')"
+
+      - name: Run the smoke test against the container
+        run: ./scripts/smoke-test.sh http://localhost:8080
+
+      - name: Confirm it runs as a non-root user
+        run: |
+          user="$(docker exec migrater id -un)"
+          echo "container user: ${user}"
+          [ "$user" != root ]
+
+      - name: Container logs
+        if: always()
+        run: docker logs migrater
+
+  native-install:
+    name: Ubuntu install, update and uninstall
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deliberately no setup-node: install.sh has to resolve Node itself, which
+      # is the path a real operator takes.
+      - name: Install
+        run: sudo ./scripts/install.sh
+
+      - name: Service is running
+        run: |
+          systemctl is-active --quiet migrater
+          systemctl is-enabled --quiet migrater
+          systemctl show migrater --property=User,WorkingDirectory,ExecStart
+
+      # Verified here rather than against the repo copy, because install.sh
+      # rewrites ExecStart to the Node this machine actually has.
+      - name: Installed unit is valid
+        run: sudo systemd-analyze verify /etc/systemd/system/migrater.service
+
+      - name: Allow the fixture host so the smoke test can run
+        run: |
+          echo 'MIGRATER_ALLOW_PRIVATE_HOSTS=true' | sudo tee -a /etc/migrater/migrater.env
+          sudo systemctl restart migrater
+          for _ in $(seq 1 30); do
+            curl -fsS http://localhost:8080/api/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+      - name: Smoke test the installed service
+        run: ./scripts/smoke-test.sh http://localhost:8080
+
+      - name: Job storage is owned by the service account
+        run: |
+          sudo test -d /var/lib/migrater/jobs
+          owner="$(stat -c '%U' /var/lib/migrater)"
+          echo "owner: ${owner}"
+          [ "$owner" = migrater ]
+
+      - name: Update in place
+        run: sudo ./scripts/update.sh
+
+      - name: Still healthy after the update
+        run: |
+          systemctl is-active --quiet migrater
+          ./scripts/smoke-test.sh http://localhost:8080
+
+      # No TTY, so uninstall.sh must take its keep-everything path. That default
+      # is the promise the script makes, so it is asserted rather than assumed.
+      - name: Uninstall without a terminal
+        run: sudo ./scripts/uninstall.sh < /dev/null
+
+      - name: Service is gone but archives and configuration survived
+        run: |
+          ! systemctl is-active --quiet migrater
+          test ! -e /etc/systemd/system/migrater.service
+          test ! -d /opt/migrater
+          sudo test -d /var/lib/migrater
+          sudo test -f /etc/migrater/migrater.env
+
+      # The machine has just been uninstalled, so this is a genuine first-time
+      # install through the path a new user takes. Run from the checkout rather
+      # than through curl, since the raw URL only serves main; everything after
+      # the download is identical.
+      - name: One-step install via bootstrap
+        env:
+          MIGRATER_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          sudo -E ./scripts/bootstrap.sh
+          systemctl is-active --quiet migrater
+
+      # install_application deletes the install directory before copying into it,
+      # and the scripts live inside that directory, so the installed copy of
+      # update.sh must refuse rather than delete the installation it runs from.
+      - name: The installed update.sh refuses to run against itself
+        run: |
+          if sudo /opt/migrater/scripts/update.sh; then
+            echo "update.sh ran from inside the installation instead of refusing" >&2
+            exit 1
+          fi
+          sudo test -f /opt/migrater/package.json
+          systemctl is-active --quiet migrater
+
+      - name: Service logs
+        if: always()
+        run: sudo journalctl -u migrater --no-pager -n 100 || true
+
+  debian-install:
+    name: Debian 13 install
+    runs-on: ubuntu-latest
+    # Runs in a container because no Debian runner exists. systemd cannot run as
+    # PID 1 in a plain container, so service management is left to the Ubuntu job
+    # above — systemd is the same software on both distributions, while the apt
+    # packages and the available Node version are what actually differ.
+    container: debian:13
+    timeout-minutes: 25
+    steps:
+      - name: Install prerequisites
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq git curl ca-certificates util-linux
+
+      - uses: actions/checkout@v4
+
+      - name: Report what this Debian ships
+        run: |
+          . /etc/os-release
+          echo "distribution: ${PRETTY_NAME}"
+          echo "packaged node: $(apt-cache policy nodejs | sed -n 's/^  Candidate: //p')"
+
+      - name: Run the installer, without the systemd steps
+        run: |
+          cd scripts
+          # shellcheck disable=SC1091
+          . ./lib.sh
+          require_root
+          require_debian_like
+          ensure_node
+          create_service_user
+          install_application "$GITHUB_WORKSPACE"
+          create_config_if_missing
+          create_data_dirs
+
+      # Debian's own nodejs package is older than this needs, so this is the one
+      # place the NodeSource install path in ensure_node actually runs: the Ubuntu
+      # runner already has a new enough Node and skips it entirely.
+      - name: Node meets the minimum
+        run: |
+          echo "node: $(node -v)"
+          major="$(node -p 'process.versions.node.split(".")[0]')"
+          [ "$major" -ge 22 ]
+
+      - name: Start as the service account
+        run: |
+          setpriv --reuid=migrater --regid="$(id -g migrater)" --clear-groups \
+            env MIGRATER_DATA_PATH=/var/lib/migrater PORT=8080 \
+                MIGRATER_ALLOW_PRIVATE_HOSTS=true \
+            node /opt/migrater/build/index.js &
+          for _ in $(seq 1 30); do
+            curl -fsS http://localhost:8080/api/health >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          echo "the service did not become healthy" >&2
+          exit 1
+
+      - name: Smoke test
+        run: ./scripts/smoke-test.sh http://localhost:8080

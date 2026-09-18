@@ -1,0 +1,35 @@
+[Unit]
+Description=Podcast RSS Migrater
+Documentation=https://github.com/thetylerwoodwardproject/Podcast_RSS_Migrater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=migrater
+Group=migrater
+WorkingDirectory=/opt/migrater
+EnvironmentFile=/etc/migrater/migrater.env
+# scripts/install.sh rewrites this line to point at whichever node the system has.
+ExecStart=/usr/bin/node /opt/migrater/build/index.js
+Restart=on-failure
+RestartSec=5
+
+# Downloads in flight are abandoned on SIGTERM rather than finished; this allows
+# time for the event streams to close so shutdown does not stall.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/migrater
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

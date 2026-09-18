@@ -1,0 +1,9 @@
+node_modules
+build
+.svelte-kit
+data
+.env
+.env.local
+tests/fixtures/generated/
+*.log
+.DS_Store

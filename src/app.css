@@ -1,0 +1,231 @@
+:root {
+  /* Charcoal surfaces; the lime accent is reserved for actions and emphasis.
+     Palette is shared with AirFLAC and Podstudio, this project's siblings. */
+  --bg: #18181b;
+  --panel: #222225;
+  --panel-raised: #2d2d31;
+  --border: #3b3b41;
+  --border-strong: #4a4a52;
+  --text: #f0f0f2;
+  --text-muted: #aaaab3;
+  --accent: #c8ff3d;
+  --accent-muted: #8fb32b;
+  --danger: #d4796b;
+  --warning: #d9b169;
+
+  --radius: 6px;
+  --radius-lg: 10px;
+  --gap: 20px;
+
+  color-scheme: dark;
+  font-family: 'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-family: 'Manrope', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+/* A single visible focus treatment, used everywhere. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* `a.button` is included throughout because the download and feed links have to
+   be real anchors -- the browser, not fetch(), should own a multi-gigabyte
+   transfer -- while still reading as buttons. */
+button,
+a.button {
+  display: inline-flex;
+  text-decoration: none;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: inherit;
+  background: var(--panel-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 12px 17px;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+button:hover:not(:disabled),
+a.button:hover {
+  filter: brightness(0.97);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.primary,
+a.button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1a2005;
+}
+
+button.quiet,
+a.button.quiet {
+  background: transparent;
+  border-color: var(--border);
+}
+
+button.danger,
+a.button.danger {
+  border-color: color-mix(in srgb, var(--danger) 60%, transparent);
+  color: var(--danger);
+}
+
+input[type='text'],
+input[type='url'],
+input[type='number'],
+input[type='email'],
+input[type='password'],
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 11px 12px;
+  width: 100%;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 90px;
+}
+
+input[type='text']:hover,
+input[type='url']:hover,
+input[type='number']:hover,
+input[type='email']:hover,
+input[type='password']:hover,
+select:hover,
+textarea:hover {
+  border-color: var(--accent-muted);
+}
+
+input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
+label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.row > * {
+  flex: 1;
+  min-width: 160px;
+}
+
+.banner {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+}
+
+.banner.error {
+  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+.banner.success {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent-muted) 55%, transparent);
+}
+
+.banner.warning {
+  background: color-mix(in srgb, var(--warning) 12%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.charcount {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-align: right;
+  margin-top: 2px;
+}
+
+.charcount.over {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
