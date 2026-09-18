@@ -27,6 +27,10 @@ This replaces an earlier Python CLI (`migrate_podcast.py`) that post-processed a
 other tool had already produced. The archiving step is now part of the app, so there is nothing to
 prepare first.
 
+## Screenshot
+
+![Screenshot](screenshot.png)
+
 ## Features
 
 - **Archive from a feed URL** — discovers and downloads audio enclosures, episode and channel
