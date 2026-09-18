@@ -105,8 +105,14 @@ create_data_dirs() {
   chmod 750 "$DATA_DIR"
 }
 
-# Copies the application into INSTALL_DIR and builds it.
-install_application() {
+# Refuses a source directory that cannot safely be installed from.
+#
+# Call this before stopping the service or touching any files: installation
+# deletes INSTALL_DIR and copies the source into it, and the scripts live inside
+# INSTALL_DIR, so running the installed copy would delete the tree it is copying
+# from. Failing here rather than mid-install is what keeps a refused update from
+# leaving the service stopped.
+require_external_source() {
   local source_dir="$1"
 
   [ -f "${source_dir}/package.json" ] || fail "Cannot find package.json in ${source_dir}."
@@ -117,10 +123,6 @@ install_application() {
   *) fail "Refusing to replace '${INSTALL_DIR}': expected /opt/migrater." ;;
   esac
 
-  # This function deletes INSTALL_DIR and then copies the source into it, and the
-  # scripts are themselves installed there. Running the installed copy of
-  # update.sh would therefore delete the tree it is about to copy from, taking the
-  # installation with it. Refuse instead.
   local resolved_source
   resolved_source="$(cd "$source_dir" 2>/dev/null && pwd -P)" ||
     fail "Cannot read the source directory ${source_dir}."
@@ -130,6 +132,15 @@ install_application() {
 Run this from a source checkout instead, for example:
   cd /usr/local/src/migrater && sudo git pull && sudo ./scripts/update.sh"
   fi
+}
+
+# Copies the application into INSTALL_DIR and builds it.
+install_application() {
+  local source_dir="$1"
+
+  # Checked again here as well as up front: this function is what does the
+  # deleting, so it should never rely on a caller having asked first.
+  require_external_source "$source_dir"
 
   info "Installing application files into ${INSTALL_DIR}"
   rm -rf "${INSTALL_DIR:?}"

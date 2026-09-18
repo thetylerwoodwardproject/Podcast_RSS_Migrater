@@ -20,6 +20,9 @@ require_debian_like
 
 [ -f "$UNIT_FILE" ] || fail "${APP_NAME} does not appear to be installed. Run scripts/install.sh first."
 
+# Before anything destructive: a refusal here must not leave the service stopped.
+require_external_source "$SOURCE_DIR"
+
 step "Checking dependencies"
 ensure_node
 

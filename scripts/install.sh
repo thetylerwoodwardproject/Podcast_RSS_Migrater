@@ -19,6 +19,8 @@ step "Checking the system"
 require_root
 require_debian_like
 
+require_external_source "$SOURCE_DIR"
+
 step "Checking dependencies"
 ensure_node
 
