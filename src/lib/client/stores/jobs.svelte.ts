@@ -128,7 +128,10 @@ class MigraterState {
     this.error = null;
     try {
       const { job } = await createJobRequest(request);
+      // Expanding is what shows the plan, so the assets have to be fetched here
+      // too: only toggleExpanded() loads them, and it is not on this path.
       this.expandedJobId = job.id;
+      await this.loadAssets(job.id);
       return true;
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'That feed could not be read.';

@@ -19,33 +19,35 @@
 {#if assets.length === 0}
   <p class="muted">No assets yet.</p>
 {:else}
-  <table>
-    <thead>
-      <tr>
-        <th>Kind</th>
-        <th>Source</th>
-        <th>Local path</th>
-        <th class="right">Size</th>
-        <th>Status</th>
-      </tr>
-    </thead>
-    <tbody>
-      {#each visible as asset (asset.id)}
+  <div class="scroller">
+    <table>
+      <thead>
         <tr>
-          <td class="muted">{asset.kind}</td>
-          <td class="mono" title={asset.sourceUrl}>{truncateUrl(asset.sourceUrl, 48)}</td>
-          <td class="mono">{asset.relativePath}</td>
-          <td class="right mono">{formatBytes(asset.bytes ?? asset.expectedBytes)}</td>
-          <td>
-            <span class="status" data-status={asset.status}>{asset.status}</span>
-            {#if asset.error}
-              <span class="error" title={asset.error}>— {asset.error}</span>
-            {/if}
-          </td>
+          <th>Kind</th>
+          <th>Source</th>
+          <th>Local path</th>
+          <th class="right">Size</th>
+          <th>Status</th>
         </tr>
-      {/each}
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+        {#each visible as asset (asset.id)}
+          <tr>
+            <td class="muted">{asset.kind}</td>
+            <td class="mono" title={asset.sourceUrl}>{truncateUrl(asset.sourceUrl, 48)}</td>
+            <td class="mono">{asset.relativePath}</td>
+            <td class="right mono">{formatBytes(asset.bytes ?? asset.expectedBytes)}</td>
+            <td>
+              <span class="status" data-status={asset.status}>{asset.status}</span>
+              {#if asset.error}
+                <span class="error" title={asset.error}>— {asset.error}</span>
+              {/if}
+            </td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
 
   {#if remaining > 0}
     <button type="button" class="quiet" onclick={() => (shown += PAGE)}>
@@ -59,6 +61,10 @@
 {/if}
 
 <style>
+  .scroller {
+    overflow-x: auto;
+  }
+
   table {
     width: 100%;
     border-collapse: collapse;
@@ -108,5 +114,15 @@
   .error {
     color: var(--danger);
     font-size: 0.85em;
+  }
+
+  /* On a phone the source URL wraps one character per line and swamps the table.
+     The local path and status are what matter at a glance, and the full source is
+     still reachable on a wider screen. */
+  @media (max-width: 680px) {
+    th:nth-child(2),
+    td:nth-child(2) {
+      display: none;
+    }
   }
 </style>

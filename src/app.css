@@ -62,8 +62,13 @@ h3 {
   outline-offset: 2px;
 }
 
-button {
+/* `a.button` is included throughout because the download and feed links have to
+   be real anchors -- the browser, not fetch(), should own a multi-gigabyte
+   transfer -- while still reading as buttons. */
+button,
+a.button {
   display: inline-flex;
+  text-decoration: none;
   align-items: center;
   gap: 8px;
   font: inherit;
@@ -78,7 +83,8 @@ button {
   transition: filter 0.15s;
 }
 
-button:hover:not(:disabled) {
+button:hover:not(:disabled),
+a.button:hover {
   filter: brightness(0.97);
 }
 
@@ -87,18 +93,21 @@ button:disabled {
   cursor: not-allowed;
 }
 
-button.primary {
+button.primary,
+a.button.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: #1a2005;
 }
 
-button.quiet {
+button.quiet,
+a.button.quiet {
   background: transparent;
   border-color: var(--border);
 }
 
-button.danger {
+button.danger,
+a.button.danger {
   border-color: color-mix(in srgb, var(--danger) 60%, transparent);
   color: var(--danger);
 }

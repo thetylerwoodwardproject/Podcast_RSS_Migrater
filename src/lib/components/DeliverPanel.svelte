@@ -175,11 +175,6 @@
     gap: 14px;
   }
 
-  .button {
-    display: inline-block;
-    text-decoration: none;
-  }
-
   details {
     border-top: 1px solid var(--border);
     padding-top: 12px;
